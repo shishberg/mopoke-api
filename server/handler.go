@@ -9,28 +9,28 @@ import (
 
 type JSONHandler func(w http.ResponseWriter, r *http.Request) (any, error)
 
-func NewJSONHandler(jh JSONHandler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp, err := jh(w, r)
-		if err != nil {
-			var code int
-			switch {
-			// TODO: add more errors
-			case errors.IsNotFound(err):
-				code = http.StatusNotFound
-			default:
-				code = http.StatusInternalServerError
-			}
-			// TODO: structured error
-			http.Error(w, err.Error(), code)
-			return
+func (jh JSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	resp, err := jh(w, r)
+	if err != nil {
+		var code int
+		switch {
+		// TODO: add more errors
+		case errors.Is(err, errors.NotFound):
+			code = http.StatusNotFound
+		case errors.Is(err, errors.MethodNotAllowed):
+			code = http.StatusMethodNotAllowed
+		default:
+			code = http.StatusInternalServerError
 		}
+		// TODO: structured error
+		http.Error(w, err.Error(), code)
+		return
+	}
 
-		out, err := json.Marshal(resp)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Write(out)
-	})
+	out, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(out)
 }
