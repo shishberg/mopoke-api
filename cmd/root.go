@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/juju/errors"
+	"github.com/shishberg/mopoke-api/server"
 	"github.com/spf13/cobra"
 )
 
@@ -33,9 +34,16 @@ func Execute() {
 }
 
 func run(cmd *cobra.Command, argv []string) {
+	mux := http.NewServeMux()
+	mux.Handle("/ok", server.NewJSONHandler(
+		func(w http.ResponseWriter, r *http.Request) (any, error) {
+			return struct{}{}, nil
+		},
+	))
+
 	addr := fmt.Sprintf("0.0.0.0:%d", args.port)
 	fmt.Println("Listening on", addr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
 	}
 }
