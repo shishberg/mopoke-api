@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/shishberg/mopoke-api/server"
@@ -40,6 +42,13 @@ func run(cmd *cobra.Command, argv []string) {
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
+	func() {
+		pingCtx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
+		defer cancel()
+		if err := db.Ping(pingCtx, nil); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	mux := http.NewServeMux()
 	mux.Handle("/ok", server.JSONHandler(
