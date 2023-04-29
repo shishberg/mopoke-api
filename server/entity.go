@@ -1,6 +1,8 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -25,6 +27,8 @@ func HandleEntity(db *mongo.Client) http.Handler {
 		switch r.Method {
 		case http.MethodGet:
 			return getEntity(r, name, tickets)
+		case http.MethodPost:
+			return postEntity(r, name, tickets)
 		default:
 			return nil, errors.MethodNotAllowed
 		}
@@ -32,10 +36,27 @@ func HandleEntity(db *mongo.Client) http.Handler {
 	})
 }
 
-func getEntity(r *http.Request, name string, tickets *mongo.Collection) (any, error) {
+func getEntity(r *http.Request, name string, tickets *mongo.Collection) (*Ticket, error) {
 	var t Ticket
 	if err := tickets.FindOne(r.Context(), bson.M{"name": name}).Decode(&t); err != nil {
 		return nil, errors.NewNotFound(err, name)
 	}
-	return t, nil
+	return &t, nil
+}
+
+type PostResponse struct {
+	ID string
+}
+
+func postEntity(r *http.Request, name string, tickets *mongo.Collection) (any, error) {
+	var t Ticket
+	// TODO: allow t.ID non-empty?
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		return nil, errors.NewBadRequest(err, "failed to parse ticket JSON")
+	}
+	result, err := tickets.InsertOne(r.Context(), t)
+	if err != nil {
+		return nil, errors.Annotate(err, "failed to insert")
+	}
+	return PostResponse{ID: fmt.Sprint(result.InsertedID)}, nil
 }
