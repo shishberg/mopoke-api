@@ -57,8 +57,10 @@ func run(cmd *cobra.Command, argv []string) {
 		},
 	))
 
+	handler := http.StripPrefix("/e", server.HandleEntity(db))
 	v1mux := http.NewServeMux()
-	v1mux.Handle("/e/", http.StripPrefix("/e", server.HandleEntity(db)))
+	v1mux.Handle("/e/", handler)
+	v1mux.Handle("/e", handler)
 
 	mux.Handle("/mopoke/v1/", http.StripPrefix("/mopoke/v1", v1mux))
 

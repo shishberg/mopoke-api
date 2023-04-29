@@ -14,9 +14,9 @@ import (
 
 type Ticket struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty"`
-	Name        string             `bson:"name"`
-	Title       string             `bson:"title"`
-	Description string             `bson:"description"`
+	Name        string             `bson:"name,omitempty"`
+	Title       string             `bson:"title,omitempty"`
+	Description string             `bson:"description,omitempty"`
 }
 
 func HandleEntity(db *mongo.Client) http.Handler {
@@ -29,6 +29,8 @@ func HandleEntity(db *mongo.Client) http.Handler {
 			return getEntity(r, name, tickets)
 		case http.MethodPost:
 			return postEntity(r, name, tickets)
+		case http.MethodPut:
+			return putEntity(r, name, tickets)
 		default:
 			return nil, errors.MethodNotAllowed
 		}
@@ -59,4 +61,16 @@ func postEntity(r *http.Request, name string, tickets *mongo.Collection) (any, e
 		return nil, errors.Annotate(err, "failed to insert")
 	}
 	return PostResponse{ID: fmt.Sprint(result.InsertedID)}, nil
+}
+
+func putEntity(r *http.Request, name string, tickets *mongo.Collection) (any, error) {
+	var t Ticket
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		return nil, errors.NewBadRequest(err, "failed to parse ticket JSON")
+	}
+	result, err := tickets.UpdateOne(r.Context(), Ticket{Name: name}, bson.D{{"$set", t}})
+	if err != nil {
+		return nil, errors.Annotate(err, "failed to update")
+	}
+	return PostResponse{ID: fmt.Sprint(result.UpsertedID)}, nil
 }
