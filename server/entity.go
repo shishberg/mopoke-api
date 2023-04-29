@@ -19,16 +19,23 @@ type Ticket struct {
 
 func HandleEntity(db *mongo.Client) http.Handler {
 	return JSONHandler(func(w http.ResponseWriter, r *http.Request) (any, error) {
-		if r.Method != http.MethodGet {
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		tickets := db.Database("mopoke").Collection("tickets")
+
+		switch r.Method {
+		case http.MethodGet:
+			return getEntity(r, name, tickets)
+		default:
 			return nil, errors.MethodNotAllowed
 		}
-		name := strings.TrimPrefix(r.URL.Path, "/")
 
-		tickets := db.Database("mopoke").Collection("tickets")
-		var t Ticket
-		if err := tickets.FindOne(r.Context(), bson.M{"name": name}).Decode(&t); err != nil {
-			return nil, errors.NewNotFound(err, name)
-		}
-		return t, nil
 	})
+}
+
+func getEntity(r *http.Request, name string, tickets *mongo.Collection) (any, error) {
+	var t Ticket
+	if err := tickets.FindOne(r.Context(), bson.M{"name": name}).Decode(&t); err != nil {
+		return nil, errors.NewNotFound(err, name)
+	}
+	return t, nil
 }
