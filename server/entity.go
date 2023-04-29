@@ -31,10 +31,11 @@ func HandleEntity(db *mongo.Client) http.Handler {
 			return postEntity(r, name, tickets)
 		case http.MethodPut:
 			return putEntity(r, name, tickets)
+		case http.MethodDelete:
+			return deleteEntity(r, name, tickets)
 		default:
 			return nil, errors.MethodNotAllowed
 		}
-
 	})
 }
 
@@ -68,9 +69,17 @@ func putEntity(r *http.Request, name string, tickets *mongo.Collection) (any, er
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		return nil, errors.NewBadRequest(err, "failed to parse ticket JSON")
 	}
-	result, err := tickets.UpdateOne(r.Context(), Ticket{Name: name}, bson.D{{"$set", t}})
+	_, err := tickets.UpdateOne(r.Context(), Ticket{Name: name}, bson.D{{"$set", t}})
 	if err != nil {
 		return nil, errors.Annotate(err, "failed to update")
 	}
-	return PostResponse{ID: fmt.Sprint(result.UpsertedID)}, nil
+	return nil, nil
+}
+
+func deleteEntity(r *http.Request, name string, tickets *mongo.Collection) (any, error) {
+	_, err := tickets.DeleteOne(r.Context(), Ticket{Name: name})
+	if err != nil {
+		return nil, errors.Annotate(err, "failed to delete")
+	}
+	return nil, nil
 }

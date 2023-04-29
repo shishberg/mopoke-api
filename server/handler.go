@@ -27,6 +27,10 @@ func (jh JSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if resp == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	out, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
