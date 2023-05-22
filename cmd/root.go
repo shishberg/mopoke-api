@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/juju/errors"
+	"github.com/shishberg/mopoke-api/db/mongomop"
 	"github.com/shishberg/mopoke-api/server"
+
+	"github.com/juju/errors"
 	"github.com/spf13/cobra"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -17,6 +19,7 @@ import (
 var (
 	args struct {
 		mongoURL string
+		dbName   string
 		port     int
 	}
 
@@ -28,6 +31,7 @@ var (
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&args.mongoURL, "db", "mongodb://localhost:27017", "mongodb address")
+	rootCmd.PersistentFlags().StringVar(&args.dbName, "dbName", "mopoke", "mongodb database name")
 	rootCmd.PersistentFlags().IntVar(&args.port, "port", 3090, "service port")
 }
 
@@ -38,26 +42,26 @@ func Execute() {
 }
 
 func run(cmd *cobra.Command, argv []string) {
-	db, err := mongo.Connect(cmd.Context(), options.Client().ApplyURI(args.mongoURL))
+	dbConn, err := mongo.Connect(cmd.Context(), options.Client().ApplyURI(args.mongoURL))
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
 	func() {
 		pingCtx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 		defer cancel()
-		if err := db.Ping(pingCtx, nil); err != nil {
+		if err := dbConn.Ping(pingCtx, nil); err != nil {
 			log.Fatal(err)
 		}
 	}()
 
 	mux := http.NewServeMux()
-	mux.Handle("/ok", server.JSONHandler(
-		func(w http.ResponseWriter, r *http.Request) (any, error) {
-			return struct{}{}, nil
-		},
-	))
+	mux.Handle("/ok", http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("ok"))
+		}))
 
-	handler := http.StripPrefix("/e", server.HandleEntity(db))
+	db := mongomop.New(dbConn.Database(args.dbName))
+	handler := http.StripPrefix("/e", server.NewHandler(db))
 	v1mux := http.NewServeMux()
 	v1mux.Handle("/e/", handler)
 	v1mux.Handle("/e", handler)

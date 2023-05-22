@@ -2,84 +2,67 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/juju/errors"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"github.com/shishberg/mopoke-api/db"
+	"github.com/shishberg/mopoke-api/mop"
 )
 
-type Ticket struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty"`
-	Name        string             `bson:"name,omitempty"`
-	Title       string             `bson:"title,omitempty"`
-	Description string             `bson:"description,omitempty"`
+type handler struct {
+	db db.MopokeDB
 }
 
-func HandleEntity(db *mongo.Client) http.Handler {
-	return JSONHandler(func(w http.ResponseWriter, r *http.Request) (any, error) {
-		name := strings.TrimPrefix(r.URL.Path, "/")
-		tickets := db.Database("mopoke").Collection("tickets")
-
-		switch r.Method {
-		case http.MethodGet:
-			return getEntity(r, name, tickets)
-		case http.MethodPost:
-			return postEntity(r, name, tickets)
-		case http.MethodPut:
-			return putEntity(r, name, tickets)
-		case http.MethodDelete:
-			return deleteEntity(r, name, tickets)
-		default:
-			return nil, errors.MethodNotAllowed
-		}
-	})
+func NewHandler(db db.MopokeDB) http.Handler {
+	return JSONHandler{&handler{db}}
 }
 
-func getEntity(r *http.Request, name string, tickets *mongo.Collection) (*Ticket, error) {
-	var t Ticket
-	if err := tickets.FindOne(r.Context(), bson.M{"name": name}).Decode(&t); err != nil {
-		return nil, errors.NewNotFound(err, name)
+func (h *handler) ServeJSON(w http.ResponseWriter, r *http.Request) (any, error) {
+	log.Println(r.Method, r.URL)
+	name := strings.TrimPrefix(r.URL.Path, "/")
+
+	switch r.Method {
+	case http.MethodGet:
+		return h.getEntity(r, name)
+	case http.MethodPost:
+		return h.postEntity(r)
+	case http.MethodPut:
+		return nil, h.putEntity(r, name)
+	case http.MethodDelete:
+		return nil, h.deleteEntity(r, name)
+	default:
+		return nil, errors.MethodNotAllowed
 	}
-	return &t, nil
 }
 
-type PostResponse struct {
-	ID string
+func (h *handler) getEntity(r *http.Request, name string) (mop.Entity, error) {
+	entity, err := h.db.Get(r.Context(), name)
+	return entity, errors.Trace(err)
 }
 
-func postEntity(r *http.Request, name string, tickets *mongo.Collection) (any, error) {
-	var t Ticket
-	// TODO: allow t.ID non-empty?
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		return nil, errors.NewBadRequest(err, "failed to parse ticket JSON")
+func (h *handler) postEntity(r *http.Request) (any, error) {
+	var e mop.Entity
+	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+		return "", errors.NewBadRequest(err, "failed to parse JSON body as entity")
 	}
-	result, err := tickets.InsertOne(r.Context(), t)
+	id, err := h.db.Insert(r.Context(), e)
 	if err != nil {
-		return nil, errors.Annotate(err, "failed to insert")
+		return nil, errors.Trace(err)
 	}
-	return PostResponse{ID: fmt.Sprint(result.InsertedID)}, nil
+	return idResponse{id}, nil
 }
 
-func putEntity(r *http.Request, name string, tickets *mongo.Collection) (any, error) {
-	var t Ticket
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		return nil, errors.NewBadRequest(err, "failed to parse ticket JSON")
+func (h *handler) putEntity(r *http.Request, name string) error {
+	var e mop.Entity
+	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+		return errors.NewBadRequest(err, "failed to parse JSON body as entity")
 	}
-	_, err := tickets.UpdateOne(r.Context(), Ticket{Name: name}, bson.D{{"$set", t}})
-	if err != nil {
-		return nil, errors.Annotate(err, "failed to update")
-	}
-	return nil, nil
+	err := h.db.Update(r.Context(), name, e)
+	return errors.Trace(err)
 }
 
-func deleteEntity(r *http.Request, name string, tickets *mongo.Collection) (any, error) {
-	_, err := tickets.DeleteOne(r.Context(), Ticket{Name: name})
-	if err != nil {
-		return nil, errors.Annotate(err, "failed to delete")
-	}
-	return nil, nil
+func (h *handler) deleteEntity(r *http.Request, name string) error {
+	return errors.Trace(h.db.Delete(r.Context(), name))
 }

@@ -7,10 +7,20 @@ import (
 	"github.com/juju/errors"
 )
 
-type JSONHandler func(w http.ResponseWriter, r *http.Request) (any, error)
+type idResponse struct {
+	ID string `json:"id"`
+}
+
+type JSONServer interface {
+	ServeJSON(w http.ResponseWriter, r *http.Request) (any, error)
+}
+
+type JSONHandler struct {
+	JSONServer
+}
 
 func (jh JSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	resp, err := jh(w, r)
+	resp, err := jh.JSONServer.ServeJSON(w, r)
 	if err != nil {
 		var code int
 		switch {
